@@ -261,79 +261,74 @@ export class Ghost {
 
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save()
-
-    // Draw ghost body
-    ctx.fillStyle = this.isFrightened
-      ? this.frightenedTimer < 2
+  
+    // Base color based on ghost type or frightened state
+    let baseColor = this.color;
+    if (this.isFrightened) {
+      baseColor = this.frightenedTimer < 2
         ? Math.floor(this.frightenedTimer * 10) % 2 === 0
           ? "#0000ff"
           : "#ffffff"
-        : "#0000ff"
-      : this.color
-
-    // Draw semi-circle for the top of the ghost
-    ctx.beginPath()
-    ctx.arc(this.x, this.y, this.radius, Math.PI, 0, false)
-    ctx.lineTo(this.x + this.radius, this.y + this.radius)
-
-    // Draw wavy bottom
-    const waveHeight = this.radius / 4
-    const segments = 3
-    const segmentWidth = (this.radius * 2) / segments
-
+        : "#0000ff";
+    }
+    
+    // Draw ghost body as a hooded figure or monster
+    ctx.fillStyle = baseColor;
+    
+    // Hooded body
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, Math.PI, 0, false);
+    ctx.lineTo(this.x + this.radius, this.y + this.radius);
+    
+    // Jagged bottom for robe/cloak effect
+    const segments = 5;
+    const segmentWidth = (this.radius * 2) / segments;
+    
     for (let i = 0; i < segments; i++) {
-      const startX = this.x + this.radius - i * segmentWidth
-      const endX = startX - segmentWidth
-
-      if (i % 2 === 0) {
-        ctx.lineTo(endX, this.y + this.radius)
-      } else {
-        ctx.lineTo(endX, this.y + this.radius - waveHeight)
-      }
+      const pointX = this.x + this.radius - (i * segmentWidth);
+      const pointY = i % 2 === 0 
+        ? this.y + this.radius * 1.2 
+        : this.y + this.radius;
+      ctx.lineTo(pointX, pointY);
     }
-
-    ctx.lineTo(this.x - this.radius, this.y)
-    ctx.fill()
-
-    // Draw eyes
-    const eyeRadius = this.radius / 3
-    const eyeOffsetX = this.radius / 2
-    const eyeOffsetY = -this.radius / 4
-
-    // Eye whites
-    ctx.fillStyle = "white"
-    ctx.beginPath()
-    ctx.arc(this.x - eyeOffsetX, this.y + eyeOffsetY, eyeRadius, 0, Math.PI * 2)
-    ctx.fill()
-
-    ctx.beginPath()
-    ctx.arc(this.x + eyeOffsetX, this.y + eyeOffsetY, eyeRadius, 0, Math.PI * 2)
-    ctx.fill()
-
-    if (!this.isFrightened) {
-      // Eye pupils - look in the direction of movement
-      const pupilRadius = eyeRadius / 2
-      const pupilOffsetX = (this.dirX * (eyeRadius - pupilRadius)) / 2
-      const pupilOffsetY = (this.dirY * (eyeRadius - pupilRadius)) / 2
-
-      ctx.fillStyle = "blue"
-      ctx.beginPath()
-      ctx.arc(this.x - eyeOffsetX + pupilOffsetX, this.y + eyeOffsetY + pupilOffsetY, pupilRadius, 0, Math.PI * 2)
-      ctx.fill()
-
-      ctx.beginPath()
-      ctx.arc(this.x + eyeOffsetX + pupilOffsetX, this.y + eyeOffsetY + pupilOffsetY, pupilRadius, 0, Math.PI * 2)
-      ctx.fill()
-    } else {
-      // Frightened eyes
-      ctx.fillStyle = "white"
-      ctx.font = `${this.radius}px Arial`
-      ctx.textAlign = "center"
-      ctx.textBaseline = "middle"
-      ctx.fillText("?", this.x, this.y + this.radius / 4)
-    }
-
-    ctx.restore()
+    
+    ctx.lineTo(this.x - this.radius, this.y + this.radius);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Eyes
+    const eyeRadius = this.radius * 0.25;
+    const eyeOffsetX = this.radius * 0.3;
+    const eyeOffsetY = -this.radius * 0.1;
+    
+    // Left eye
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(this.x - eyeOffsetX, this.y + eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Right eye
+    ctx.beginPath();
+    ctx.arc(this.x + eyeOffsetX, this.y + eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Pupils - look in direction of movement
+    ctx.fillStyle = "#000000";
+    const pupilRadius = eyeRadius * 0.6;
+    const pupilOffsetX = this.dirX * (eyeRadius * 0.3);
+    const pupilOffsetY = this.dirY * (eyeRadius * 0.3);
+    
+    // Left pupil
+    ctx.beginPath();
+    ctx.arc(this.x - eyeOffsetX + pupilOffsetX, this.y + eyeOffsetY + pupilOffsetY, pupilRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Right pupil
+    ctx.beginPath();
+    ctx.arc(this.x + eyeOffsetX + pupilOffsetX, this.y + eyeOffsetY + pupilOffsetY, pupilRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
   }
 
   makeFrightened() {
