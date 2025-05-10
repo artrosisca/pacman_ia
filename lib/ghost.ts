@@ -13,6 +13,25 @@ export enum GhostMode {
   FRIGHTENED = 2,
 }
 
+// Node class for A* pathfinding
+class Node {
+  x: number;
+  y: number;
+  g: number = 0; // Cost from start to current node
+  h: number = 0; // Heuristic (estimated cost from current to goal)
+  f: number = 0; // Total cost (g + h)
+  parent: Node | null = null;
+  
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+  
+  equals(other: Node): boolean {
+    return this.x === other.x && this.y === other.y;
+  }
+}
+
 export class Ghost {
   x: number
   y: number
@@ -35,6 +54,7 @@ export class Ghost {
   scatterDuration: number
   chaseDuration: number
   isFrightened: boolean
+  path: {x: number, y: number}[] = []; // Store the calculated path
   isWaiting: boolean
   waitTimer: number
   waitDuration: number
@@ -128,12 +148,37 @@ export class Ghost {
     if (Math.abs(this.x - centerX) < 1 && Math.abs(this.y - centerY) < 1) {
       this.x = centerX
       this.y = centerY
-      this.chooseNextDirection()
+      
+      // For Pinky, use A* to find path to target when in chase mode
+      if (this.type === GhostType.PINKY && this.mode === GhostMode.CHASE && !this.isFrightened) {
+        this.findPathAStar();
+      } else {
+        this.chooseNextDirection();
+      }
     }
 
-    // Move in current direction
-    this.x += this.dirX * this.speed * deltaTime
-    this.y += this.dirY * this.speed * deltaTime
+    // Calculate next position
+    const nextX = this.x + this.dirX * this.speed * deltaTime;
+    const nextY = this.y + this.dirY * this.speed * deltaTime;
+    
+    // Check for wall collision before moving
+    if (!this.checkCollision(nextX, nextY)) {
+      this.x = nextX;
+      this.y = nextY;
+    } else {
+      // If we hit a wall, choose a new direction immediately
+      // This is crucial to prevent ghosts from getting stuck
+      this.chooseNextDirection();
+      
+      // Try moving in the new direction
+      const newNextX = this.x + this.dirX * this.speed * deltaTime;
+      const newNextY = this.y + this.dirY * this.speed * deltaTime;
+      
+      if (!this.checkCollision(newNextX, newNextY)) {
+        this.x = newNextX;
+        this.y = newNextY;
+      }
+    }
 
     // Handle tunnel wrapping
     if (this.x < 0) {
@@ -141,6 +186,26 @@ export class Ghost {
     } else if (this.x > this.map[0].length * this.cellSize) {
       this.x = 0
     }
+  }
+  
+  // Add collision detection method
+  checkCollision(x: number, y: number): boolean {
+    // Check if the next position would collide with a wall
+    const cellX1 = Math.floor((x - this.radius * 0.8) / this.cellSize)
+    const cellY1 = Math.floor((y - this.radius * 0.8) / this.cellSize)
+    const cellX2 = Math.floor((x + this.radius * 0.8) / this.cellSize)
+    const cellY2 = Math.floor((y + this.radius * 0.8) / this.cellSize)
+
+    // Check all cells that Ghost would occupy
+    for (let y = cellY1; y <= cellY2; y++) {
+      for (let x = cellX1; x <= cellX2; x++) {
+        if (this.map[y] && this.map[y][x] === 3) {
+          return true
+        }
+      }
+    }
+
+    return false
   }
 
   updateTarget(pacman: Pacman) {
@@ -185,7 +250,17 @@ export class Ghost {
         // Pinky targets 4 tiles ahead of Pacman
         this.targetX = pacman.x + pacman.dirX * 4 * this.cellSize
         this.targetY = pacman.y + pacman.dirY * 4 * this.cellSize
-        break
+        
+        // Debug logging for Pinky's targeting
+        if (this.mode === GhostMode.CHASE) {
+          console.log("Pinky targeting:", {
+            pacmanPos: { x: pacman.x, y: pacman.y },
+            pacmanDir: { x: pacman.dirX, y: pacman.dirY },
+            targetPos: { x: this.targetX, y: this.targetY },
+            offset: { x: pacman.dirX * 4 * this.cellSize, y: pacman.dirY * 4 * this.cellSize }
+          });
+        }
+        break;
       case GhostType.INKY:
         // Inky targets based on Blinky's position and Pacman's position
         const pivotX = pacman.x + pacman.dirX * 2 * this.cellSize
@@ -209,6 +284,122 @@ export class Ghost {
         }
         break
     }
+  }
+
+  // A* pathfinding algorithm for Pinky
+  findPathAStar() {
+    // Convert current position and target to grid coordinates
+    const startX = Math.floor(this.x / this.cellSize);
+    const startY = Math.floor(this.y / this.cellSize);
+    const targetX = Math.floor(this.targetX / this.cellSize);
+    const targetY = Math.floor(this.targetY / this.cellSize);
+    
+    // Ensure target is within map bounds
+    const boundedTargetX = Math.max(0, Math.min(targetX, this.map[0].length - 1));
+    const boundedTargetY = Math.max(0, Math.min(targetY, this.map.length - 1));
+    
+    // Create start and end nodes
+    const startNode = new Node(startX, startY);
+    const endNode = new Node(boundedTargetX, boundedTargetY);
+    
+    // Initialize open and closed lists
+    const openList: Node[] = [];
+    const closedList: Node[] = [];
+    
+    // Add the start node to open list
+    openList.push(startNode);
+    
+    // Define movement directions (up, right, down, left)
+    const directions = [
+      { x: 0, y: -1 }, // Up
+      { x: 1, y: 0 },  // Right
+      { x: 0, y: 1 },  // Down
+      { x: -1, y: 0 }  // Left
+    ];
+    
+    // Main A* loop
+    while (openList.length > 0) {
+      // Find the node with the lowest f value in open list
+      let currentIndex = 0;
+      let currentNode = openList[0];
+      
+      for (let i = 1; i < openList.length; i++) {
+        if (openList[i].f < currentNode.f) {
+          currentNode = openList[i];
+          currentIndex = i;
+        }
+      }
+      
+      // Remove current node from open list and add to closed list
+      openList.splice(currentIndex, 1);
+      closedList.push(currentNode);
+      
+      // If we reached the end node, reconstruct and return the path
+      if (currentNode.equals(endNode)) {
+        const path: {x: number, y: number}[] = [];
+        let current: Node | null = currentNode;
+        
+        while (current) {
+          path.push({ x: current.x, y: current.y });
+          current = current.parent;
+        }
+        
+        // Reverse to get path from start to end
+        path.reverse();
+        
+        // If path has at least one step beyond the current position
+        if (path.length > 1) {
+          // Set direction based on the next step in the path
+          const nextStep = path[1];
+          this.dirX = nextStep.x - startX;
+          this.dirY = nextStep.y - startY;
+        }
+        
+        return;
+      }
+      
+      // Generate children nodes
+      for (const dir of directions) {
+        const nodeX = currentNode.x + dir.x;
+        const nodeY = currentNode.y + dir.y;
+        
+        // Check if position is valid (within map bounds and not a wall)
+        if (nodeY < 0 || nodeY >= this.map.length || 
+            nodeX < 0 || nodeX >= this.map[0].length || 
+            this.map[nodeY][nodeX] === 3) {
+          continue;
+        }
+        
+        // Create new node
+        const newNode = new Node(nodeX, nodeY);
+        newNode.parent = currentNode;
+        
+        // Skip if node is in closed list
+        if (closedList.some(node => node.equals(newNode))) {
+          continue;
+        }
+        
+        // Calculate g, h, and f values
+        newNode.g = currentNode.g + 1;
+        // Manhattan distance heuristic
+        newNode.h = Math.abs(newNode.x - endNode.x) + Math.abs(newNode.y - endNode.y);
+        newNode.f = newNode.g + newNode.h;
+        
+        // Skip if node is already in open list with a better path
+        const existingOpenNode = openList.find(node => node.equals(newNode));
+        if (existingOpenNode && newNode.g >= existingOpenNode.g) {
+          continue;
+        }
+        
+        // Add node to open list
+        if (!existingOpenNode) {
+          openList.push(newNode);
+        }
+      }
+    }
+    
+    // If no path is found, fall back to the regular direction choosing method
+    this.chooseNextDirection();
   }
 
   chooseNextDirection() {
@@ -350,6 +541,23 @@ export class Ghost {
     ctx.arc(this.x + eyeOffsetX + pupilOffsetX, this.y + eyeOffsetY + pupilOffsetY, pupilRadius, 0, Math.PI * 2);
     ctx.fill();
     
+    ctx.restore();
+    
+    // Debug visualization for Pinky's target (only when in chase mode)
+    if (this.type === GhostType.PINKY && this.mode === GhostMode.CHASE && !this.isFrightened) {
+      // Draw target position
+      ctx.fillStyle = "rgba(255, 184, 255, 0.5)"; // Semi-transparent pink
+      ctx.beginPath();
+      ctx.arc(this.targetX, this.targetY, this.radius / 2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw line from Pinky to target
+      ctx.strokeStyle = "rgba(255, 184, 255, 0.5)";
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y);
+      ctx.lineTo(this.targetX, this.targetY);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
