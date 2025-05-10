@@ -83,7 +83,7 @@ export default function PacmanGame() {
     
     // Initialize Ghosts
     game.ghosts = [
-      new Ghost(13.5 * CELL_SIZE, 11 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE, GhostType.BLINKY),
+      new Ghost(16.5 * CELL_SIZE, 14 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE, GhostType.BLINKY),
       new Ghost(12 * CELL_SIZE, 14 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE, GhostType.PINKY),
       new Ghost(13.5 * CELL_SIZE, 14 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE, GhostType.INKY),
       new Ghost(15 * CELL_SIZE, 14 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE, GhostType.CLYDE),
@@ -379,7 +379,7 @@ export default function PacmanGame() {
         <div className="text-white">LEVEL: {level}</div>
       </div>
 
-      <canvas ref={canvasRef} width={28 * CELL_SIZE} height={31 * CELL_SIZE} className="border-2 border-blue-500" />
+      <canvas ref={canvasRef} width={28 * CELL_SIZE} height={31 * CELL_SIZE} className="border-2 border-black-500" />
 
       <div className="mt-2 flex">
         {Array.from({ length: lives }).map((_, i) => (
