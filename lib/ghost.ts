@@ -157,34 +157,29 @@ export class Ghost {
       }
     }
 
-    // Calculate next position
     const nextX = this.x + this.dirX * this.speed * deltaTime;
     const nextY = this.y + this.dirY * this.speed * deltaTime;
     
-    // Check for wall collision before moving
-    if (!this.checkCollision(nextX, nextY)) {
-      this.x = nextX;
-      this.y = nextY;
+    // Check map boundaries before moving
+    const nextCellX = Math.floor(nextX / this.cellSize);
+    const nextCellY = Math.floor(nextY / this.cellSize);
+    
+    // Only move if within map bounds and not hitting a wall
+    if (nextCellY >= 0 && nextCellY < this.map.length &&
+        nextCellX >= 0 && nextCellX < this.map[0].length &&
+        this.map[nextCellY][nextCellX] !== 3) {
+        this.x = nextX;
+        this.y = nextY;
     } else {
-      // If we hit a wall, choose a new direction immediately
-      // This is crucial to prevent ghosts from getting stuck
-      this.chooseNextDirection();
-      
-      // Try moving in the new direction
-      const newNextX = this.x + this.dirX * this.speed * deltaTime;
-      const newNextY = this.y + this.dirY * this.speed * deltaTime;
-      
-      if (!this.checkCollision(newNextX, newNextY)) {
-        this.x = newNextX;
-        this.y = newNextY;
-      }
+        // If hitting a boundary, try to find a new direction
+        this.chooseNextDirection();
     }
 
     // Handle tunnel wrapping
     if (this.x < 0) {
-      this.x = this.map[0].length * this.cellSize
+        this.x = this.map[0].length * this.cellSize;
     } else if (this.x > this.map[0].length * this.cellSize) {
-      this.x = 0
+        this.x = 0;
     }
   }
   
@@ -209,82 +204,78 @@ export class Ghost {
   }
 
   updateTarget(pacman: Pacman) {
-    if (this.isFrightened) {
-      // Random target when frightened
-      this.targetX = Math.floor(Math.random() * this.map[0].length) * this.cellSize
-      this.targetY = Math.floor(Math.random() * this.map.length) * this.cellSize
-      return
-    }
-
-    if (this.mode === GhostMode.SCATTER) {
-      // Each ghost has a different corner to scatter to
-      switch (this.type) {
-        case GhostType.BLINKY:
-          this.targetX = this.map[0].length * this.cellSize
-          this.targetY = 0
-          break
-        case GhostType.PINKY:
-          this.targetX = 0
-          this.targetY = 0
-          break
-        case GhostType.INKY:
-          this.targetX = this.map[0].length * this.cellSize
-          this.targetY = this.map.length * this.cellSize
-          break
-        case GhostType.CLYDE:
-          this.targetX = 0
-          this.targetY = this.map.length * this.cellSize
-          break
-      }
-      return
-    }
-
-    // Chase mode - each ghost has a different targeting strategy
-    switch (this.type) {
-      case GhostType.BLINKY:
-        // Blinky targets Pacman directly
-        this.targetX = pacman.x
-        this.targetY = pacman.y
-        break
-      case GhostType.PINKY:
-        // Pinky targets 4 tiles ahead of Pacman
-        this.targetX = pacman.x + pacman.dirX * 4 * this.cellSize
-        this.targetY = pacman.y + pacman.dirY * 4 * this.cellSize
-        
-        // Debug logging for Pinky's targeting
-        if (this.mode === GhostMode.CHASE) {
-          console.log("Pinky targeting:", {
-            pacmanPos: { x: pacman.x, y: pacman.y },
-            pacmanDir: { x: pacman.dirX, y: pacman.dirY },
-            targetPos: { x: this.targetX, y: this.targetY },
-            offset: { x: pacman.dirX * 4 * this.cellSize, y: pacman.dirY * 4 * this.cellSize }
-          });
+    try {
+        if (this.isFrightened) {
+            // Comportamento aleatório quando assustado
+            this.targetX = Math.floor(Math.random() * this.map[0].length) * this.cellSize;
+            this.targetY = Math.floor(Math.random() * this.map.length) * this.cellSize;
+            return;
         }
-        break;
-      case GhostType.INKY:
-        // Inky targets based on Blinky's position and Pacman's position
-        const pivotX = pacman.x + pacman.dirX * 2 * this.cellSize
-        const pivotY = pacman.y + pacman.dirY * 2 * this.cellSize
-        // We don't have Blinky's position, so we'll use a simplified version
-        this.targetX = pivotX * 2 - this.x
-        this.targetY = pivotY * 2 - this.y
-        break
-      case GhostType.CLYDE:
-        // Clyde targets Pacman directly if far away, otherwise targets scatter position
-        const dx = pacman.x - this.x
-        const dy = pacman.y - this.y
-        const distance = Math.sqrt(dx * dx + dy * dy)
-
-        if (distance > 8 * this.cellSize) {
-          this.targetX = pacman.x
-          this.targetY = pacman.y
-        } else {
-          this.targetX = 0
-          this.targetY = this.map.length * this.cellSize
+  
+        if (this.mode === GhostMode.SCATTER) {
+            // Each ghost has a different corner to scatter to
+            switch (this.type) {
+                case GhostType.BLINKY:
+                    this.targetX = this.map[0].length * this.cellSize
+                    this.targetY = 0
+                    break
+                case GhostType.PINKY:
+                    this.targetX = 0
+                    this.targetY = 0
+                    break
+                case GhostType.INKY:
+                    this.targetX = this.map[0].length * this.cellSize
+                    this.targetY = this.map.length * this.cellSize
+                    break
+                case GhostType.CLYDE:
+                    this.targetX = 0
+                    this.targetY = this.map.length * this.cellSize
+                    break
+            }
+            return
         }
-        break
+
+        // Chase mode logic for all ghosts
+        switch (this.type) {
+            case GhostType.BLINKY:
+                const aStarTarget = this.aStarSearch(pacman);
+                if (aStarTarget) {
+                    this.targetX = aStarTarget.x;
+                    this.targetY = aStarTarget.y;
+                }
+                break;
+            case GhostType.PINKY:
+                const pinkyTarget = this.greedySearch(pacman);
+                this.targetX = pinkyTarget.x;
+                this.targetY = pinkyTarget.y;
+                break;
+            case GhostType.INKY:
+                // Inky targets a position based on Pac-Man and Blinky
+                const pivotX = pacman.x + pacman.dirX * 2 * this.cellSize;
+                const pivotY = pacman.y + pacman.dirY * 2 * this.cellSize;
+                this.targetX = pivotX * 2 - this.x;
+                this.targetY = pivotY * 2 - this.y;
+                break;
+            case GhostType.CLYDE:
+                const distanceToPacman = Math.sqrt(
+                    Math.pow(this.x - pacman.x, 2) + Math.pow(this.y - pacman.y, 2)
+                );
+                if (distanceToPacman < 8 * this.cellSize) {
+                    // Run away to corner
+                    this.targetX = 0;
+                    this.targetY = this.map.length * this.cellSize;
+                } else {
+                    // Chase Pac-Man
+                    this.targetX = pacman.x;
+                    this.targetY = pacman.y;
+                }
+                break;
+        }
+    } catch (error) {
+        // If something goes wrong, maintain current target
+        console.error('Error in updateTarget:', error);
     }
-  }
+}
 
   // A* pathfinding algorithm for Pinky
   findPathAStar() {
@@ -445,26 +436,32 @@ export class Ghost {
     }
 
     // Choose direction that gets closest to target
-    let bestDir = possibleDirs[0]
-    let bestDistance = Number.POSITIVE_INFINITY
+    let bestDir = possibleDirs[0];
+    let bestDistance = Number.POSITIVE_INFINITY;
 
     for (const dir of possibleDirs) {
-      const nextX = this.x + dir.x * this.cellSize
-      const nextY = this.y + dir.y * this.cellSize
+        const nextX = Math.floor(this.x / this.cellSize) + dir.x;
+        const nextY = Math.floor(this.y / this.cellSize) + dir.y;
 
-      const dx = nextX - this.targetX
-      const dy = nextY - this.targetY
-      const distance = dx * dx + dy * dy // Square distance is enough for comparison
+        // Skip if out of bounds
+        if (nextY < 0 || nextY >= this.map.length ||
+            nextX < 0 || nextX >= this.map[0].length) {
+            continue;
+        }
 
-      if (distance < bestDistance) {
-        bestDistance = distance
-        bestDir = dir
-      }
+        const dx = (nextX * this.cellSize) - this.targetX;
+        const dy = (nextY * this.cellSize) - this.targetY;
+        const distance = dx * dx + dy * dy;
+
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestDir = dir;
+        }
     }
 
-    this.dirX = bestDir.x
-    this.dirY = bestDir.y
-  }
+    this.dirX = bestDir.x;
+    this.dirY = bestDir.y;
+}
 
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save()
@@ -481,12 +478,6 @@ export class Ghost {
     
     // Draw ghost body as a hooded figure or monster
     ctx.fillStyle = baseColor;
-    
-    // If ghost is waiting, make it semi-transparent and add a pulsing effect
-    if (this.isWaiting) {
-      const alpha = 0.3 + Math.sin(this.waitTimer * 5) * 0.2; // Pulsing effect
-      ctx.globalAlpha = alpha;
-    }
     
     // Hooded body
     ctx.beginPath();
@@ -540,24 +531,6 @@ export class Ghost {
     ctx.beginPath();
     ctx.arc(this.x + eyeOffsetX + pupilOffsetX, this.y + eyeOffsetY + pupilOffsetY, pupilRadius, 0, Math.PI * 2);
     ctx.fill();
-    
-    ctx.restore();
-    
-    // Debug visualization for Pinky's target (only when in chase mode)
-    if (this.type === GhostType.PINKY && this.mode === GhostMode.CHASE && !this.isFrightened) {
-      // Draw target position
-      ctx.fillStyle = "rgba(255, 184, 255, 0.5)"; // Semi-transparent pink
-      ctx.beginPath();
-      ctx.arc(this.targetX, this.targetY, this.radius / 2, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Draw line from Pinky to target
-      ctx.strokeStyle = "rgba(255, 184, 255, 0.5)";
-      ctx.beginPath();
-      ctx.moveTo(this.x, this.y);
-      ctx.lineTo(this.targetX, this.targetY);
-      ctx.stroke();
-    }
     ctx.restore();
   }
 
@@ -589,5 +562,129 @@ export class Ghost {
   increaseSpeed(amount: number) {
     this.baseSpeed += amount
     this.speed = this.baseSpeed
+  }
+
+  // Heurística para Blinky: Distância Manhattan até o Pac-Man
+  private calculateBlinkyHeuristic(x: number, y: number, pacman: Pacman): number {
+    return Math.abs(x - pacman.x) + Math.abs(y - pacman.y);
+  }
+  
+  // Função de custo real para A*
+  private calculateGCost(x: number, y: number, parentG: number): number {
+    return parentG + this.cellSize;
+  }
+  
+  // Implementação A* para Blinky
+  private aStarSearch(pacman: Pacman): {x: number, y: number} {
+    const openSet: Array<{x: number, y: number, g: number, f: number}> = [];
+    const closedSet = new Set<string>();
+    const startX = Math.floor(this.x / this.cellSize);
+    const startY = Math.floor(this.y / this.cellSize);
+    
+    openSet.push({
+      x: startX,
+      y: startY,
+      g: 0,
+      f: this.calculateBlinkyHeuristic(startX, startY, pacman)
+    });
+  
+    const MAX_ITERATIONS = 1000;
+    let iterations = 0;
+    
+    while (openSet.length > 0 && iterations < MAX_ITERATIONS) {
+        iterations++;
+        const current = openSet.reduce((min, item) => item.f < min.f ? item : min, openSet[0]);
+        const currentIndex = openSet.findIndex(item => item.x === current.x && item.y === current.y);
+        
+        if (Math.abs(current.x - Math.floor(pacman.x / this.cellSize)) < 1 &&
+                Math.abs(current.y - Math.floor(pacman.y / this.cellSize)) < 1) {
+            return {x: current.x * this.cellSize, y: current.y * this.cellSize};
+        }
+    
+        // Remove the current node properly
+        openSet.splice(currentIndex, 1);
+        closedSet.add(`${current.x},${current.y}`);
+    
+        // Check if node is already in openSet before adding
+        for (const dir of [{x: 0, y: -1}, {x: 1, y: 0}, {x: 0, y: 1}, {x: -1, y: 0}]) {
+            const nextX = current.x + dir.x;
+            const nextY = current.y + dir.y;
+            
+            const nodeKey = `${nextX},${nextY}`;
+            if (this.map[nextY] && this.map[nextY][nextX] !== 3 && 
+                    !closedSet.has(nodeKey) &&
+                    !openSet.some(node => node.x === nextX && node.y === nextY)) {
+                const g = this.calculateGCost(nextX, nextY, current.g);
+                const h = this.calculateBlinkyHeuristic(nextX, nextY, pacman);
+                const f = g + h;
+                
+                openSet.push({x: nextX, y: nextY, g: g, f: f});
+            }
+        }
+    }
+    
+    // If max iterations reached, return current position
+    return {x: this.x, y: this.y};
+  }
+
+  // Heurística para Pinky: Distância até 4 células à frente do Pac-Man
+  private calculatePinkyHeuristic(x: number, y: number, pacman: Pacman): number {
+    const targetX = pacman.x + pacman.dirX * 4 * this.cellSize;
+    const targetY = pacman.y + pacman.dirY * 4 * this.cellSize;
+    return Math.abs(x - targetX) + Math.abs(y - targetY);
+  }
+  
+  // Busca gulosa para Pinky
+  private greedySearch(pacman: Pacman): {x: number, y: number} {
+    const possibleMoves = [];
+    const currentX = Math.floor(this.x / this.cellSize);
+    const currentY = Math.floor(this.y / this.cellSize);
+    
+    const directions = [{x: 0, y: -1}, {x: 1, y: 0}, {x: 0, y: 1}, {x: -1, y: 0}];
+    
+    for (const dir of directions) {
+        const nextX = currentX + dir.x;
+        const nextY = currentY + dir.y;
+        
+        if (nextY >= 0 && nextY < this.map.length && 
+            nextX >= 0 && nextX < this.map[0].length && 
+            this.map[nextY][nextX] !== 3) {
+            const h = this.calculatePinkyHeuristic(nextX * this.cellSize, nextY * this.cellSize, pacman);
+            possibleMoves.push({x: nextX, y: nextY, h: h});
+        }
+    }
+    
+    if (possibleMoves.length === 0) return {x: this.x, y: this.y};
+    
+    const bestMove = possibleMoves.reduce((min, move) => move.h < min.h ? move : min, possibleMoves[0]);
+    return {x: bestMove.x * this.cellSize, y: bestMove.y * this.cellSize};
+  }
+
+  // Heurística híbrida para Inky
+  private calculateInkyHeuristic(x: number, y: number, pacman: Pacman): number {
+    const pivotX = pacman.x + pacman.dirX * 2 * this.cellSize;
+    const pivotY = pacman.y + pacman.dirY * 2 * this.cellSize;
+    const targetX = pivotX * 2 - this.x;
+    const targetY = pivotY * 2 - this.y;
+    
+    // Combina distância até o alvo com um componente aleatório
+    const baseHeuristic = Math.abs(x - targetX) + Math.abs(y - targetY);
+    const randomFactor = Math.random() * this.cellSize * 2;
+    return baseHeuristic + randomFactor;
+  }
+
+  // Heurística para Clyde
+  private calculateClydeHeuristic(x: number, y: number, pacman: Pacman): number {
+    const distanceToPacman = Math.sqrt(
+      Math.pow(x - pacman.x, 2) + Math.pow(y - pacman.y, 2)
+    );
+    
+    // Se estiver muito perto do Pac-Man, prioriza ir para o canto
+    if (distanceToPacman < 8 * this.cellSize) {
+      return Math.abs(x) + Math.abs(y - this.map.length * this.cellSize);
+    }
+    
+    // Caso contrário, persegue o Pac-Man
+    return Math.abs(x - pacman.x) + Math.abs(y - pacman.y);
   }
 }
