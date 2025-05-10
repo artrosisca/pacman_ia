@@ -55,6 +55,9 @@ export class Ghost {
   chaseDuration: number
   isFrightened: boolean
   path: {x: number, y: number}[] = []; // Store the calculated path
+  isWaiting: boolean
+  waitTimer: number
+  waitDuration: number
 
   constructor(x: number, y: number, radius: number, map: number[][], cellSize: number, type: GhostType) {
     this.x = x
@@ -71,6 +74,9 @@ export class Ghost {
     this.type = type
     this.mode = GhostMode.SCATTER
     this.isFrightened = false
+    this.isWaiting = false
+    this.waitTimer = 0
+    this.waitDuration = 5 // 5 seconds wait time
 
     // Set color based on ghost type
     switch (type) {
@@ -99,6 +105,16 @@ export class Ghost {
   }
 
   update(deltaTime: number, pacman: Pacman) {
+    // Update wait timer if ghost is waiting
+    if (this.isWaiting) {
+      this.waitTimer -= deltaTime
+      if (this.waitTimer <= 0) {
+        this.isWaiting = false
+        this.speed = this.baseSpeed
+      }
+      return // Don't update position or behavior while waiting
+    }
+
     // Update timers
     if (this.isFrightened) {
       this.frightenedTimer -= deltaTime
@@ -466,6 +482,12 @@ export class Ghost {
     // Draw ghost body as a hooded figure or monster
     ctx.fillStyle = baseColor;
     
+    // If ghost is waiting, make it semi-transparent and add a pulsing effect
+    if (this.isWaiting) {
+      const alpha = 0.3 + Math.sin(this.waitTimer * 5) * 0.2; // Pulsing effect
+      ctx.globalAlpha = alpha;
+    }
+    
     // Hooded body
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, Math.PI, 0, false);
@@ -554,10 +576,14 @@ export class Ghost {
     this.y = this.initialY
     this.dirX = 0
     this.dirY = -1
-    this.isFrightened = false
-    this.speed = this.baseSpeed
+    this.speed = 0 // Stop movement
     this.mode = GhostMode.SCATTER
     this.scatterTimer = 0
+    this.isWaiting = true
+    this.waitTimer = this.waitDuration
+    this.isFrightened = false // Reset frightened state
+    this.frightenedTimer = 0 // Reset frightened timer
+    this.speed = this.baseSpeed // Reset speed to normal
   }
 
   increaseSpeed(amount: number) {
