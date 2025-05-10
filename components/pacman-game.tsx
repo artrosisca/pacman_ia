@@ -1,13 +1,35 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { defaultMap } from "@/lib/maps"
+import { defaultMap, centralMazeMap, castleMap } from "@/lib/maps"
 import { Ghost, GhostType } from "@/lib/ghost"
 import { Pacman } from "@/lib/pacman"
 import { GameState } from "@/lib/game-state"
 
 const CELL_SIZE = 20
 const FPS = 60
+
+// Define a class with static properties for initial positions
+class PacmanPositions {
+  static readonly defaultMap = {
+    x: 14 * CELL_SIZE,
+    y: 23.5 * CELL_SIZE
+  };
+  
+  static readonly centralMazeMap = {
+    x: 14 * CELL_SIZE,
+    y: 25.5 * CELL_SIZE
+  };
+  
+  static readonly castleMap = {
+    x: 14 * CELL_SIZE,
+    y: 23.5 * CELL_SIZE
+  };
+  
+  static getPosition(mapName: string): {x: number, y: number} {
+    return (this as any)[mapName] || this.defaultMap;
+  }
+}
 
 export default function PacmanGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -18,6 +40,7 @@ export default function PacmanGame() {
   const [level, setLevel] = useState(1)
 
   const gameRef = useRef<{
+    mapName: string
     map: number[][]
     pacman: Pacman | null
     ghosts: Ghost[]
@@ -25,6 +48,8 @@ export default function PacmanGame() {
     animationFrameId: number
     lastTime: number
   }>({
+    // defaultMap, centralMazeMap, castleMap
+    mapName: "defaultMap",
     map: JSON.parse(JSON.stringify(defaultMap)),
     pacman: null,
     ghosts: [],
@@ -47,11 +72,18 @@ export default function PacmanGame() {
     game.dotCount = game.map.flat().filter((cell) => cell === 1 || cell === 2).length
 
     // Initialize Pacman
-    game.pacman = new Pacman(14 * CELL_SIZE, 23.5 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE)
-
+    const initialPos = PacmanPositions.getPosition(game.mapName);
+    game.pacman = new Pacman(
+      initialPos.x, 
+      initialPos.y, 
+      CELL_SIZE / 2, 
+      game.map, 
+      CELL_SIZE
+    );
+    
     // Initialize Ghosts
     game.ghosts = [
-      new Ghost(13.5 * CELL_SIZE, 11 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE, GhostType.BLINKY),
+      new Ghost(16.5 * CELL_SIZE, 14 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE, GhostType.BLINKY),
       new Ghost(12 * CELL_SIZE, 14 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE, GhostType.PINKY),
       new Ghost(13.5 * CELL_SIZE, 14 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE, GhostType.INKY),
       new Ghost(15 * CELL_SIZE, 14 * CELL_SIZE, CELL_SIZE / 2, game.map, CELL_SIZE, GhostType.CLYDE),
@@ -90,11 +122,6 @@ export default function PacmanGame() {
         case "ArrowLeft":
         case "a":
           game.pacman.setDirection(-1, 0)
-          break
-        // Add emergency unstuck key
-        case "r":
-        case "R":
-          unstuckPacman()
           break
       }
     }
@@ -205,30 +232,80 @@ export default function PacmanGame() {
     const game = gameRef.current
 
     // Clear canvas
-    ctx.fillStyle = "black"
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
+    // Clear canvas with medieval floor texture
+    ctx.fillStyle = "#2e1f1a"; // Dark wood/stone color
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add floor texture pattern
+    ctx.strokeStyle = "#231612"; // Darker lines for floor boards
+    ctx.lineWidth = 1;
+    
+    // Draw horizontal floor boards
+    for (let y = 0; y < canvas.height; y += CELL_SIZE) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+    
+    // Draw some vertical supports occasionally
+    for (let x = 0; x < canvas.width; x += CELL_SIZE * 5) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    
     // Draw maze
     for (let y = 0; y < game.map.length; y++) {
       for (let x = 0; x < game.map[y].length; x++) {
         const cell = game.map[y][x]
-
+    
         if (cell === 3) {
-          // Wall
-          ctx.fillStyle = "#2121ff"
-          ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+          // Wall as stone blocks
+          ctx.fillStyle = "#696969"; // Stone gray
+          ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+          
+          // Add stone texture
+          ctx.strokeStyle = "#404040"; // Darker gray for mortar
+          ctx.lineWidth = 1;
+          
+          // Horizontal mortar lines
+          if (y % 2 === 0) {
+            ctx.beginPath();
+            ctx.moveTo(x * CELL_SIZE, y * CELL_SIZE + CELL_SIZE / 2);
+            ctx.lineTo(x * CELL_SIZE + CELL_SIZE, y * CELL_SIZE + CELL_SIZE / 2);
+            ctx.stroke();
+          } else {
+            ctx.beginPath();
+            ctx.moveTo(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE);
+            ctx.lineTo(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE);
+            ctx.stroke();
+          }
         } else if (cell === 1) {
-          // Dot
-          ctx.fillStyle = "#ffb8ae"
-          ctx.beginPath()
-          ctx.arc(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE / 10, 0, Math.PI * 2)
-          ctx.fill()
+          // Dot as gold coin
+          ctx.fillStyle = "#FFD700"; // Gold
+          ctx.beginPath();
+          ctx.arc(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE / 10, 0, Math.PI * 2);
+          ctx.fill();
         } else if (cell === 2) {
-          // Power pellet
-          ctx.fillStyle = "#ffb8ae"
-          ctx.beginPath()
-          ctx.arc(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE / 4, 0, Math.PI * 2)
-          ctx.fill()
+          // Power pellet as magical orb
+          const centerX = x * CELL_SIZE + CELL_SIZE / 2;
+          const centerY = y * CELL_SIZE + CELL_SIZE / 2;
+          
+          // Glowing orb effect
+          const gradient = ctx.createRadialGradient(
+            centerX, centerY, 0,
+            centerX, centerY, CELL_SIZE / 3
+          );
+          gradient.addColorStop(0, "#ffffff");
+          gradient.addColorStop(0.7, "#7851a9"); // Purple magic
+          gradient.addColorStop(1, "#4a3278");
+          
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, CELL_SIZE / 4, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
     }
@@ -294,17 +371,6 @@ export default function PacmanGame() {
     }
   }
 
-  const unstuckPacman = () => {
-    const game = gameRef.current
-    if (!game.pacman) return
-
-    // Move Pacman to a known safe position
-    game.pacman.x = 13.5 * CELL_SIZE
-    game.pacman.y = 23 * CELL_SIZE
-    game.pacman.dirX = 0
-    game.pacman.dirY = 0
-  }
-
   return (
     <div className="flex flex-col items-center">
       <div className="flex justify-between w-full mb-2">
@@ -313,19 +379,12 @@ export default function PacmanGame() {
         <div className="text-white">LEVEL: {level}</div>
       </div>
 
-      <canvas ref={canvasRef} width={28 * CELL_SIZE} height={31 * CELL_SIZE} className="border-2 border-blue-500" />
+      <canvas ref={canvasRef} width={28 * CELL_SIZE} height={31 * CELL_SIZE} className="border-2 border-black-500" />
 
       <div className="mt-2 flex">
         {Array.from({ length: lives }).map((_, i) => (
           <div key={i} className="w-5 h-5 bg-yellow-400 rounded-full mx-1"></div>
         ))}
-      </div>
-
-      <div className="mt-4 text-white text-sm">
-        <p>Controls: Arrow keys or WASD</p>
-        <button onClick={unstuckPacman} className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-black px-4 py-1 rounded">
-          Unstuck Pacman
-        </button>
       </div>
     </div>
   )
