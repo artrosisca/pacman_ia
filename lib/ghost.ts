@@ -587,21 +587,6 @@ export class Ghost {
     this.dirY = -this.dirY
   }
 
-  reset() {
-    this.x = this.initialX
-    this.y = this.initialY
-    this.dirX = 0
-    this.dirY = -1
-    this.speed = 0 // Stop movement
-    this.mode = GhostMode.SCATTER
-    this.scatterTimer = 0
-    this.isWaiting = true
-    this.waitTimer = this.waitDuration
-    this.isFrightened = false // Reset frightened state
-    this.frightenedTimer = 0 // Reset frightened timer
-    this.speed = this.baseSpeed // Reset speed to normal
-  }
-
   increaseSpeed(amount: number) {
     this.baseSpeed += amount
     this.speed = this.baseSpeed
