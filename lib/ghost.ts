@@ -111,6 +111,19 @@ export class Ghost {
       if (this.waitTimer <= 0) {
         this.isWaiting = false
         this.speed = this.baseSpeed
+        
+        // Force an initial direction to help ghosts escape their box
+        const cellX = Math.floor(this.x / this.cellSize);
+        const cellY = Math.floor(this.y / this.cellSize);
+        
+        // Try to move upward first to escape the ghost box
+        if (cellY > 0 && this.map[cellY-1][cellX] !== 3) {
+          this.dirX = 0;
+          this.dirY = -1;
+        } else {
+          // If can't move up, try other directions
+          this.chooseNextDirection();
+        }
       }
       return // Don't update position or behavior while waiting
     }
@@ -160,19 +173,13 @@ export class Ghost {
     const nextX = this.x + this.dirX * this.speed * deltaTime;
     const nextY = this.y + this.dirY * this.speed * deltaTime;
     
-    // Check map boundaries before moving
-    const nextCellX = Math.floor(nextX / this.cellSize);
-    const nextCellY = Math.floor(nextY / this.cellSize);
-    
-    // Only move if within map bounds and not hitting a wall
-    if (nextCellY >= 0 && nextCellY < this.map.length &&
-        nextCellX >= 0 && nextCellX < this.map[0].length &&
-        this.map[nextCellY][nextCellX] !== 3) {
-        this.x = nextX;
-        this.y = nextY;
+    // Check if the next position would cause a collision with a wall
+    if (!this.wouldCollideWithWall(nextX, nextY)) {
+      this.x = nextX;
+      this.y = nextY;
     } else {
-        // If hitting a boundary, try to find a new direction
-        this.chooseNextDirection();
+      // If hitting a boundary, try to find a new direction
+      this.chooseNextDirection();
     }
 
     // Handle tunnel wrapping
@@ -183,24 +190,130 @@ export class Ghost {
     }
   }
   
-  // Add collision detection method
-  checkCollision(x: number, y: number): boolean {
-    // Check if the next position would collide with a wall
-    const cellX1 = Math.floor((x - this.radius * 0.8) / this.cellSize)
-    const cellY1 = Math.floor((y - this.radius * 0.8) / this.cellSize)
-    const cellX2 = Math.floor((x + this.radius * 0.8) / this.cellSize)
-    const cellY2 = Math.floor((y + this.radius * 0.8) / this.cellSize)
+  // Improved collision detection method
+  private wouldCollideWithWall(x: number, y: number): boolean {
+    // Create a buffer around the ghost to keep it from getting too close to walls
+    const buffer = this.radius * 0.9; // Slightly smaller than the full radius for better movement
+    
+    // Check all four corners of the ghost's bounding box plus the buffer
+    const points = [
+      { x: x - buffer, y: y - buffer }, // Top-left
+      { x: x + buffer, y: y - buffer }, // Top-right
+      { x: x - buffer, y: y + buffer }, // Bottom-left
+      { x: x + buffer, y: y + buffer }  // Bottom-right
+    ];
+    
+    // Check if any of these points would be inside a wall
+    for (const point of points) {
+      const cellX = Math.floor(point.x / this.cellSize);
+      const cellY = Math.floor(point.y / this.cellSize);
+      
+      // Check if this cell is a wall or out of bounds
+      if (cellY < 0 || cellY >= this.map.length || 
+          cellX < 0 || cellX >= this.map[0].length || 
+          this.map[cellY][cellX] === 3) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
 
-    // Check all cells that Ghost would occupy
-    for (let y = cellY1; y <= cellY2; y++) {
-      for (let x = cellX1; x <= cellX2; x++) {
-        if (this.map[y] && this.map[y][x] === 3) {
-          return true
-        }
+  chooseNextDirection() {
+    // Get possible directions (excluding the opposite of current direction)
+    const possibleDirs = []
+    const oppositeX = -this.dirX
+    const oppositeY = -this.dirY
+
+    // Check each direction
+    const directions = [
+      { x: 0, y: -1 }, // Up
+      { x: 1, y: 0 }, // Right
+      { x: 0, y: 1 }, // Down
+      { x: -1, y: 0 }, // Left
+    ]
+
+    for (const dir of directions) {
+      // Skip opposite direction (no U-turns) unless no other option
+      if (dir.x === oppositeX && dir.y === oppositeY) continue
+
+      // Check if there's a wall in this direction
+      const nextX = Math.floor(this.x / this.cellSize) + dir.x
+      const nextY = Math.floor(this.y / this.cellSize) + dir.y
+
+      // Make sure we're checking within bounds
+      if (nextY >= 0 && nextY < this.map.length && 
+          nextX >= 0 && nextX < this.map[0].length && 
+          this.map[nextY][nextX] !== 3) {
+        possibleDirs.push(dir)
       }
     }
 
-    return false
+    if (possibleDirs.length === 0) {
+      // If no valid directions, allow U-turn
+      this.dirX = oppositeX
+      this.dirY = oppositeY
+      return
+    }
+
+    if (this.isFrightened) {
+      // Choose random direction when frightened
+      const randomDir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)]
+      this.dirX = randomDir.x
+      this.dirY = randomDir.y
+      return
+    }
+
+    // Choose direction that gets closest to target
+    let bestDir = possibleDirs[0];
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const dir of possibleDirs) {
+        const nextX = (Math.floor(this.x / this.cellSize) + dir.x) * this.cellSize + this.cellSize/2;
+        const nextY = (Math.floor(this.y / this.cellSize) + dir.y) * this.cellSize + this.cellSize/2;
+
+        const dx = nextX - this.targetX;
+        const dy = nextY - this.targetY;
+        const distance = dx * dx + dy * dy;
+
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestDir = dir;
+        }
+    }
+
+    this.dirX = bestDir.x;
+    this.dirY = bestDir.y;
+  }
+
+  reset() {
+    this.x = this.initialX
+    this.y = this.initialY
+    this.dirX = 0
+    this.dirY = -1
+    this.speed = 0 // Stop movement
+    this.mode = GhostMode.SCATTER
+    this.scatterTimer = 0
+    this.isWaiting = true
+    this.waitTimer = this.waitDuration
+    this.isFrightened = false // Reset frightened state
+    this.frightenedTimer = 0 // Reset frightened timer
+    
+    // Stagger ghost release times based on type
+    switch (this.type) {
+      case GhostType.BLINKY:
+        this.waitTimer = 1; // Blinky leaves first
+        break;
+      case GhostType.PINKY:
+        this.waitTimer = 3; // Pinky leaves second
+        break;
+      case GhostType.INKY:
+        this.waitTimer = 5; // Inky leaves third
+        break;
+      case GhostType.CLYDE:
+        this.waitTimer = 7; // Clyde leaves last
+        break;
+    }
   }
 
   updateTarget(pacman: Pacman) {
@@ -392,76 +505,6 @@ export class Ghost {
     // If no path is found, fall back to the regular direction choosing method
     this.chooseNextDirection();
   }
-
-  chooseNextDirection() {
-    // Get possible directions (excluding the opposite of current direction)
-    const possibleDirs = []
-    const oppositeX = -this.dirX
-    const oppositeY = -this.dirY
-
-    // Check each direction
-    const directions = [
-      { x: 0, y: -1 }, // Up
-      { x: 1, y: 0 }, // Right
-      { x: 0, y: 1 }, // Down
-      { x: -1, y: 0 }, // Left
-    ]
-
-    for (const dir of directions) {
-      // Skip opposite direction (no U-turns)
-      if (dir.x === oppositeX && dir.y === oppositeY) continue
-
-      // Check if there's a wall in this direction
-      const nextX = Math.floor(this.x / this.cellSize) + dir.x
-      const nextY = Math.floor(this.y / this.cellSize) + dir.y
-
-      if (this.map[nextY] && this.map[nextY][nextX] !== 3) {
-        possibleDirs.push(dir)
-      }
-    }
-
-    if (possibleDirs.length === 0) {
-      // If no valid directions, allow U-turn
-      this.dirX = oppositeX
-      this.dirY = oppositeY
-      return
-    }
-
-    if (this.isFrightened) {
-      // Choose random direction when frightened
-      const randomDir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)]
-      this.dirX = randomDir.x
-      this.dirY = randomDir.y
-      return
-    }
-
-    // Choose direction that gets closest to target
-    let bestDir = possibleDirs[0];
-    let bestDistance = Number.POSITIVE_INFINITY;
-
-    for (const dir of possibleDirs) {
-        const nextX = Math.floor(this.x / this.cellSize) + dir.x;
-        const nextY = Math.floor(this.y / this.cellSize) + dir.y;
-
-        // Skip if out of bounds
-        if (nextY < 0 || nextY >= this.map.length ||
-            nextX < 0 || nextX >= this.map[0].length) {
-            continue;
-        }
-
-        const dx = (nextX * this.cellSize) - this.targetX;
-        const dy = (nextY * this.cellSize) - this.targetY;
-        const distance = dx * dx + dy * dy;
-
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            bestDir = dir;
-        }
-    }
-
-    this.dirX = bestDir.x;
-    this.dirY = bestDir.y;
-}
 
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save()
