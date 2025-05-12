@@ -7,7 +7,6 @@ import { Pacman } from "@/lib/pacman"
 import { GameState } from "@/lib/game-state"
 
 const CELL_SIZE = 20
-const FPS = 60
 
 // Define a class with static properties for initial positions
 class PacmanPositions {
@@ -37,7 +36,7 @@ export default function PacmanGame() {
   const [lives, setLives] = useState(3)
   const [gameState, setGameState] = useState<GameState>(GameState.READY)
   const [highScore, setHighScore] = useState(0)
-  const [level, setLevel] = useState(1)
+  var [level, setLevel] = useState(1)
 
   const gameRef = useRef<{
     mapName: string
@@ -326,48 +325,88 @@ export default function PacmanGame() {
     if (gameState === GameState.READY) {
       ctx.fillText("PRESS SPACE TO START", canvas.width / 2, canvas.height / 2)
     } else if (gameState === GameState.GAME_OVER) {
-      ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2)
-      ctx.fillText("PRESS SPACE TO RESTART", canvas.width / 2, canvas.height / 2 + 30)
+      // Enhanced game over screen
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.fillStyle = "#FF0000";
+      ctx.font = "30px Arial";
+      ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
+      
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.fillText(`FINAL SCORE: ${score}`, canvas.width / 2, canvas.height / 2);
+      
+      if (score > highScore) {
+        ctx.fillStyle = "#FFD700";
+        ctx.fillText("NEW HIGH SCORE!", canvas.width / 2, canvas.height / 2 + 30);
+      }
+      
+      ctx.fillStyle = "white";
+      ctx.fillText("PRESS SPACE TO RESTART", canvas.width / 2, canvas.height / 2 + 60);
     }
   }
 
   const resetGame = (nextLevel = false) => {
     const game = gameRef.current
 
-    // Reset map
-    game.map = JSON.parse(JSON.stringify(defaultMap))
+    // Select map based on level
+    if (nextLevel) {
+      // Progress to next level
+      if (level === 1) {
+        // Moving to level 2 - central maze map
+        game.mapName = "centralMazeMap";
+        game.map = JSON.parse(JSON.stringify(centralMazeMap));
+        level = 2;
+      } else if (level === 2) {
+        // Moving to level 3 - castle map (final level)
+        game.mapName = "castleMap";
+        game.map = JSON.parse(JSON.stringify(castleMap));
+        level = 3;
+      } else {
+        // If somehow we go beyond level 3, loop back to level 1 but with increased difficulty
+        game.mapName = "defaultMap";
+        game.map = JSON.parse(JSON.stringify(defaultMap));
+      }
+    } else {
+      // Reset to level 1
+      game.mapName = "defaultMap";
+      game.map = JSON.parse(JSON.stringify(defaultMap));
+    }
 
     // Count dots
     game.dotCount = game.map.flat().filter((cell) => cell === 1 || cell === 2).length
 
-    // Reset Pacman
+    // Reset Pacman with position based on current map
     if (game.pacman) {
-      game.pacman.reset()
-
-      // Ensure Pacman is not stuck in a wall after reset
-      const pacmanCellX = Math.floor(game.pacman.x / CELL_SIZE)
-      const pacmanCellY = Math.floor(game.pacman.y / CELL_SIZE)
-
-      if (game.map[pacmanCellY][pacmanCellX] === 3) {
-        // If in a wall, move to a safe position
-        game.pacman.x = 13.5 * CELL_SIZE
-        game.pacman.y = 23 * CELL_SIZE
-      }
+      const initialPos = PacmanPositions.getPosition(game.mapName);
+      game.pacman.x = initialPos.x;
+      game.pacman.y = initialPos.y;
+      game.pacman.initialX = initialPos.x;
+      game.pacman.initialY = initialPos.y;
+      game.pacman.dirX = 0;
+      game.pacman.dirY = 0;
+      game.pacman.nextDirX = 0;
+      game.pacman.nextDirY = 0;
+      game.pacman.angle = 0;
+      game.pacman.map = game.map; // Update map reference
     }
 
     // Reset Ghosts
     game.ghosts.forEach((ghost) => {
-      ghost.reset()
+      ghost.reset();
+      ghost.map = game.map; // Update map reference
+      
       // Increase ghost speed for higher levels
       if (nextLevel) {
-        ghost.increaseSpeed(level * 0.1)
+        ghost.increaseSpeed(level * 0.1);
       }
     })
 
     if (!nextLevel) {
-      setScore(0)
-      setLives(3)
-      setLevel(1)
+      setScore(0);
+      setLives(3);
+      setLevel(1);
     }
   }
 
@@ -376,7 +415,12 @@ export default function PacmanGame() {
       <div className="flex justify-between w-full mb-2">
         <div className="text-white">SCORE: {score}</div>
         <div className="text-white">HIGH SCORE: {highScore}</div>
-        <div className="text-white">LEVEL: {level}</div>
+        <div className="text-white">
+          LEVEL: {level} 
+          {level === 1 && " (Default)"}
+          {level === 2 && " (Maze)"}
+          {level === 3 && " (Castle)"}
+        </div>
       </div>
 
       <canvas ref={canvasRef} width={28 * CELL_SIZE} height={31 * CELL_SIZE} className="border-2 border-black-500" />
