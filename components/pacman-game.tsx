@@ -190,7 +190,7 @@ export default function PacmanGame() {
 
     // Update Ghosts
     game.ghosts.forEach((ghost) => {
-      ghost.update(deltaTime, game.pacman!)
+      ghost.update(deltaTime, game.pacman!, game.ghosts)
 
       // Check collision with Pacman
       const dx = ghost.x - game.pacman!.x
