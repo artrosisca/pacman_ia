@@ -58,6 +58,8 @@ export class Ghost {
   isWaiting: boolean
   waitTimer: number
   waitDuration: number
+  private exitX: number;
+  private exitY: number;
 
   constructor(x: number, y: number, radius: number, map: number[][], cellSize: number, type: GhostType) {
     this.x = x
@@ -67,8 +69,8 @@ export class Ghost {
     this.radius = radius
     this.baseSpeed = 120 // pixels per second
     this.speed = this.baseSpeed
-    this.dirX = 0
-    this.dirY = -1 // Start moving up
+    this.dirX = 1
+    this.dirY = 0
     this.map = map
     this.cellSize = cellSize
     this.type = type
@@ -76,7 +78,10 @@ export class Ghost {
     this.isFrightened = false
     this.isWaiting = false
     this.waitTimer = 0
-    this.waitDuration = 5 // 5 seconds wait time
+    this.waitDuration = 2 // 2 seconds wait time
+    this.exitX = Math.floor(map[0].length / 2) * cellSize; // Posição X da saída
+    this.exitY = 14 * cellSize; // Posição Y da saída
+
 
     // Set color based on ghost type
     switch (type) {
@@ -104,7 +109,7 @@ export class Ghost {
     this.chaseDuration = 20 // seconds
   }
 
-  update(deltaTime: number, pacman: Pacman) {
+  update(deltaTime: number, pacman: Pacman, ghosts: Ghost[]) {
     // Update wait timer if ghost is waiting
     if (this.isWaiting) {
       this.waitTimer -= deltaTime
@@ -148,7 +153,7 @@ export class Ghost {
     }
 
     // Update target based on mode and ghost type
-    this.updateTarget(pacman)
+    this.updateTarget(pacman, ghosts)
 
     // Decide next direction at intersections
     const cellX = Math.floor(this.x / this.cellSize)
@@ -316,7 +321,9 @@ export class Ghost {
     }
   }
 
-  updateTarget(pacman: Pacman) {
+  updateTarget(pacman: Pacman, ghosts: Ghost[]) {
+    if (!pacman) return; // add security check for pacman
+
     try {
         if (this.isFrightened) {
             // Comportamento aleatório quando assustado
@@ -364,10 +371,12 @@ export class Ghost {
                 break;
             case GhostType.INKY:
                 // Inky targets a position based on Pac-Man and Blinky
+                const blinky = ghosts.find(g => g.type === GhostType.BLINKY);
+                if (!blinky) break;
                 const pivotX = pacman.x + pacman.dirX * 2 * this.cellSize;
                 const pivotY = pacman.y + pacman.dirY * 2 * this.cellSize;
-                this.targetX = pivotX * 2 - this.x;
-                this.targetY = pivotY * 2 - this.y;
+                this.targetX = pivotX * 2 - blinky.x;
+                this.targetY = pivotY * 2 - blinky.y;
                 break;
             case GhostType.CLYDE:
                 const distanceToPacman = Math.sqrt(
@@ -397,14 +406,25 @@ export class Ghost {
     const startY = Math.floor(this.y / this.cellSize);
     const targetX = Math.floor(this.targetX / this.cellSize);
     const targetY = Math.floor(this.targetY / this.cellSize);
+    const exitGridX = Math.floor(this.exitX / this.cellSize);
+    const exitGridY = Math.floor(this.exitY / this.cellSize)
     
     // Ensure target is within map bounds
     const boundedTargetX = Math.max(0, Math.min(targetX, this.map[0].length - 1));
     const boundedTargetY = Math.max(0, Math.min(targetY, this.map.length - 1));
+
+    if (this.map[boundedTargetY][boundedTargetX] === 3) {
+      this.chooseNextDirection(); 
+      return;
+    }
+
+    if (startX === exitGridX && startY === exitGridY) return;
     
     // Create start and end nodes
     const startNode = new Node(startX, startY);
-    const endNode = new Node(boundedTargetX, boundedTargetY);
+    const targetGridX = Math.floor(this.targetX / this.cellSize);
+    const targetGridY = Math.floor(this.targetY / this.cellSize);
+    const endNode = new Node(targetGridX, targetGridY);
     
     // Initialize open and closed lists
     const openList: Node[] = [];
@@ -586,7 +606,6 @@ export class Ghost {
     this.dirX = -this.dirX
     this.dirY = -this.dirY
   }
-
   increaseSpeed(amount: number) {
     this.baseSpeed += amount
     this.speed = this.baseSpeed
