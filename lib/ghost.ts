@@ -61,6 +61,11 @@ export class Ghost {
   private exitX: number;
   private exitY: number;
   private isInSpawnArea: boolean;
+  // Add stuck detection properties
+  private lastX: number;
+  private lastY: number;
+  private stuckTimer: number = 0;
+  private stuckThreshold: number = 1; // 1 second threshold
 
   constructor(x: number, y: number, radius: number, map: number[][], cellSize: number, type: GhostType) {
     this.x = x
@@ -81,6 +86,9 @@ export class Ghost {
     this.waitTimer = 0
     this.waitDuration = 2 // 2 seconds wait time
     this.isInSpawnArea = this.checkIfInSpawnArea();
+    this.lastX = x
+    this.lastY = y
+    this.stuckTimer = 0
     
     // Find the exit point dynamically
     const exitPoint = this.findExitPoint();
@@ -218,6 +226,22 @@ export class Ghost {
   }
 
   update(deltaTime: number, pacman: Pacman, ghosts: Ghost[]) {
+    // Check for stuck ghost - don't count when frightened
+    if (!this.isFrightened && Math.abs(this.x - this.lastX) < 1 && Math.abs(this.y - this.lastY) < 1) {
+      this.stuckTimer += deltaTime;
+      
+      // If stuck for more than the threshold, take recovery action
+      if (this.stuckTimer > this.stuckThreshold) {
+        this.recoverFromStuck();
+        this.stuckTimer = 0; // Reset the timer
+      }
+    } else {
+      // Ghost is moving or frightened, reset stuck timer
+      this.stuckTimer = 0;
+      this.lastX = this.x;
+      this.lastY = this.y;
+    }
+    
     // Update wait timer if ghost is waiting
     if (this.isWaiting) {
       this.waitTimer -= deltaTime
@@ -437,6 +461,11 @@ export class Ghost {
     this.waitTimer = this.waitDuration
     this.isFrightened = false // Reset frightened state
     this.frightenedTimer = 0 // Reset frightened timer
+    
+    // Reset stuck detection
+    this.lastX = this.initialX
+    this.lastY = this.initialY
+    this.stuckTimer = 0
     
     // Find the exit point dynamically (in case map changed)
     const exitPoint = this.findExitPoint();
@@ -1182,5 +1211,82 @@ export class Ghost {
     }
     
     return false;
+  }
+  
+  // Add a method to recover from being stuck
+  private recoverFromStuck() {
+    console.log(`${this.type} ghost was stuck, attempting recovery`);
+    
+    // Try all possible directions
+    const directions = [
+      { x: 0, y: -1 }, // Up
+      { x: 1, y: 0 },  // Right
+      { x: 0, y: 1 },  // Down
+      { x: -1, y: 0 }  // Left
+    ];
+    
+    // Shuffle directions for randomness
+    for (let i = directions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [directions[i], directions[j]] = [directions[j], directions[i]];
+    }
+    
+    // Try each direction until we find one that doesn't hit a wall
+    for (const dir of directions) {
+      const nextX = this.x + dir.x * this.cellSize;
+      const nextY = this.y + dir.y * this.cellSize;
+      
+      if (!this.wouldCollideWithWall(nextX, nextY)) {
+        // Set this direction and slightly boost speed temporarily
+        this.dirX = dir.x;
+        this.dirY = dir.y;
+        this.speed = this.baseSpeed * 1.5; // Temporary speed boost
+        
+        // Force position to center of current cell
+        const cellX = Math.floor(this.x / this.cellSize);
+        const cellY = Math.floor(this.y / this.cellSize);
+        this.x = cellX * this.cellSize + this.cellSize / 2;
+        this.y = cellY * this.cellSize + this.cellSize / 2;
+        
+        // Move a bit in the new direction to ensure we're unstuck
+        this.x += this.dirX * 2;
+        this.y += this.dirY * 2;
+        
+        console.log(`${this.type} ghost recovered, new direction: ${this.dirX},${this.dirY}`);
+        return;
+      }
+    }
+    
+    // If all else fails, try teleporting to a nearby valid cell
+    const currentCellX = Math.floor(this.x / this.cellSize);
+    const currentCellY = Math.floor(this.y / this.cellSize);
+    
+    // Check cells in a 3x3 grid around current position
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const checkX = currentCellX + dx;
+        const checkY = currentCellY + dy;
+        
+        // Skip current cell and ensure cell is within bounds
+        if ((dx === 0 && dy === 0) || 
+            checkY < 0 || checkY >= this.map.length || 
+            checkX < 0 || checkX >= this.map[0].length) {
+          continue;
+        }
+        
+        // If cell is not a wall or spawn area, teleport there
+        if (this.map[checkY][checkX] !== 3 && this.map[checkY][checkX] !== 4) {
+          this.x = checkX * this.cellSize + this.cellSize / 2;
+          this.y = checkY * this.cellSize + this.cellSize / 2;
+          
+          // Set direction away from current cell
+          this.dirX = dx !== 0 ? dx : (Math.random() > 0.5 ? 1 : -1);
+          this.dirY = dy !== 0 ? dy : (Math.random() > 0.5 ? 1 : -1);
+          
+          console.log(`${this.type} ghost teleported to recover from being stuck`);
+          return;
+        }
+      }
+    }
   }
 }
